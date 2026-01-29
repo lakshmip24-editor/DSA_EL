@@ -2,6 +2,7 @@ import streamlit as st
 import subprocess
 import time
 import json
+import sys
 import os
 
 # --- Constants ---
@@ -11,10 +12,25 @@ USERS_FILE = os.path.join(os.path.dirname(__file__), "users.json")
 # --- Backend Interface ---
 class SchedulerBackend:
     def __init__(self):
-        self.exe_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backend/scheduler.exe"))
+        backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backend"))
+        exe_path = os.path.join(backend_dir, "scheduler.exe")
+        py_path = os.path.join(backend_dir, "scheduler.py")
+
+        cmd = []
+        if os.path.exists(exe_path):
+            cmd = [exe_path]
+        elif os.path.exists(py_path):
+            # Fallback to Python implementation
+            cmd = [sys.executable, py_path]
+            print("Using Python Fallback Backend")
+        else:
+            st.error(f"Backend not found! Looked for {exe_path} or {py_path}")
+            self.process = None
+            return
+
         try:
             self.process = subprocess.Popen(
-                [self.exe_path],
+                cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -46,15 +62,22 @@ class SchedulerBackend:
         if not desc: desc = "Event"
         if len(desc) > 95: desc = desc[:95]
         
-        return self.send_command(f"ADD {doc_id} {start} {duration} {type_id} {break_type} {desc}")
+        resp = self.send_command(f"ADD {doc_id} {start} {duration} {type_id} {break_type} {desc}")
+        if resp == "OK":
+            st.session_state['edu_msg'] = "✅ Added: Inserted into Hash Map (O(1)), Interval Tree (O(log n)) & Min Heap. Stack updated for Undo."
+        elif resp and resp.startswith("COLLISION"):
+            st.session_state['edu_msg'] = "⚠️ Collision: Interval Tree detection found overlapping interval [Start, End)."
+        return resp
 
     def suggest(self, doc_id, duration, day_start):
+        st.session_state['edu_msg'] = "🔎 Suggestion Algo: Linear scan checked against Interval Tree verification for free slots."
         resp = self.send_command(f"SUGGEST {doc_id} {duration} {day_start}")
         if resp and resp.startswith("SUGGESTION"):
             return int(resp.split()[1])
         return -1
 
     def undo(self, doc_id):
+        st.session_state['edu_msg'] = "↩️ Undo Operation: Stack LIFO Pop. Event ID retrieved. Hash Map Entry & Interval Tree Node removed & rebalanced."
         self.send_command(f"UNDO {doc_id}")
 
     def get_events(self, doc_id):
@@ -311,6 +334,29 @@ else:
 
     # Spacer
     st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
+
+    # --- Educational Message Pop-up ---
+    if 'edu_msg' in st.session_state:
+        e_msg = st.session_state.pop('edu_msg')
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 25px rgba(118, 75, 162, 0.4);
+            border-left: 6px solid #fbbf24;
+            animation: fadeIn 0.5s;
+        ">
+            <div style="font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; margin-bottom: 5px;">
+                🧠 Data Structure Operation
+            </div>
+            <div style="font-size: 1.1em; font-weight: 500;">
+                {e_msg}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # --- Date Selection ---
     from datetime import datetime, date, timedelta
@@ -492,7 +538,7 @@ else:
         st.markdown("---")
         if st.button("↩️ Undo Last Action"):
             backend.undo(doc_idx)
-            st.toast("Last action undone")
+            # st.toast("Last action undone") - Removed in favor of edu_msg
             st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
