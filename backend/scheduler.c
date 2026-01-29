@@ -58,6 +58,10 @@ StackNode* undo_stacks[MAX_DOCTORS] = {NULL};
 
 int max_val(int a, int b) { return (a > b) ? a : b; }
 
+/* Daily Duration Limit per Doctor (Default 480 mins = 8 hours) */
+int daily_limits[MAX_DOCTORS];
+
+
 /* --- Hash Map --- */
 void hash_insert(Event* e) {
     int key = e->id % HASH_SIZE;
@@ -205,6 +209,18 @@ int count_events_on_day(int doctor_id, int day_start, int day_end) {
     return count;
 }
 
+int get_total_duration_on_day(int doctor_id, int day_start, int day_end) {
+    int total_duration = 0;
+    for(int i = 0; i < upcoming_heaps[doctor_id].size; i++) {
+        Event* e = upcoming_heaps[doctor_id].events[i];
+        if (e->start_time >= day_start && e->start_time < day_end) {
+            total_duration += e->duration;
+        }
+    }
+    return total_duration;
+}
+
+
 /* Returns 0 on success, 1 on collision, 2 on max events reached */
 int add_event(int doctor_id, int start, int duration, int type, int break_type, const char* desc, int* collision_start, int* collision_end) {
     /* Check Global Limit */
@@ -218,6 +234,13 @@ int add_event(int doctor_id, int start, int duration, int type, int break_type, 
     if (count_events_on_day(doctor_id, day_start, day_end) >= MAX_EVENTS_DAILY_LIMIT) {
         return 2; /* Using same error code for Limit Reached */
     }
+
+    /* Check Time Limit */
+    int current_duration = get_total_duration_on_day(doctor_id, day_start, day_end);
+    if (current_duration + duration > daily_limits[doctor_id]) {
+        return 3; /* New error code for Time Limit Exceeded */
+    }
+
     
     int end = start + duration;
     ITNode* collision = check_collision(interval_trees[doctor_id], start, end);
@@ -287,6 +310,28 @@ void undo_last(int doctor_id) {
     free(e);
 }
 
+void delete_specific_event(int doctor_id, int event_id) {
+    Event* e = hash_get(doctor_id, event_id);
+    if (!e) return;
+
+    /* Remove from Heap */
+    heap_remove(&upcoming_heaps[doctor_id], event_id);
+
+    /* Remove from Hash */
+    hash_remove(doctor_id, event_id);
+
+    /* Rebuild Interval Tree */
+    free_it_tree(interval_trees[doctor_id]);
+    interval_trees[doctor_id] = NULL;
+    for (int i = 0; i < upcoming_heaps[doctor_id].size; i++) {
+        interval_trees[doctor_id] = it_insert(interval_trees[doctor_id], upcoming_heaps[doctor_id].events[i]);
+    }
+    
+    /* We do NOT remove from Stack. If UNDO pops this ID later, hash_get will return NULL and it handles it gracefully. */
+    free(e);
+}
+
+
 /* Returns JSON string of events. Caller must not free (static buffer), valid until next call */
 static char json_buffer[4096];
 const char* get_events_json(int doctor_id) {
@@ -325,6 +370,10 @@ long get_time_to_next_event(int doctor_id, int current_time_mins) {
 /* --- Main Loop for Subprocess Communication --- */
 int main() {
     init_scheduler();
+    for (int i = 0; i < MAX_DOCTORS; i++) {
+        daily_limits[i] = 480; /* Default 8 hours */
+    }
+
     /* Disable buffering for stdin/stdout to ensure immediate communication */
     setvbuf(stdin, NULL, _IONBF, 0);
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -342,6 +391,23 @@ int main() {
             if (res == 0) printf("OK\n");
             else if (res == 1) printf("COLLISION %d %d\n", col_start, col_end);
             else if (res == 2) printf("MAX_EVENTS\n");
+            else if (res == 3) printf("TIME_LIMIT\n");
+        }
+        else if (strcmp(command, "DELETE") == 0) {
+            int doc_id, event_id;
+            scanf("%d %d", &doc_id, &event_id);
+            delete_specific_event(doc_id, event_id);
+            printf("OK\n");
+        }
+        else if (strcmp(command, "SET_LIMIT") == 0) {
+            int doc_id, limit;
+            scanf("%d %d", &doc_id, &limit);
+            if (doc_id >= 0 && doc_id < MAX_DOCTORS) {
+                daily_limits[doc_id] = limit;
+                printf("OK\n");
+            } else {
+                printf("ERROR\n");
+            }
         }
         else if (strcmp(command, "SUGGEST") == 0) {
             int doc_id, duration, day_start;

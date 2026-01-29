@@ -96,6 +96,14 @@ class SchedulerBackend:
         except:
             return -1
 
+    def delete_event(self, doc_id, event_id):
+        st.session_state['edu_msg'] = "❌ Deletion: Removed from Hash Map O(1) & Heap O(log n). Interval Tree Rebuilt."
+        self.send_command(f"DELETE {doc_id} {event_id}")
+
+    def set_limit(self, doc_id, limit):
+        self.send_command(f"SET_LIMIT {doc_id} {limit}")
+
+
 @st.cache_resource
 def get_backend():
     return SchedulerBackend()
@@ -373,6 +381,16 @@ else:
         sel_d = st.date_input("Select Date", value=st.session_state.selected_date, label_visibility="collapsed")
         st.session_state.selected_date = sel_d
         st.markdown("</div>", unsafe_allow_html=True)
+
+        # Settings
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("⚙️ Settings"):
+             st.markdown("### Daily Limit")
+             limit_hours = st.slider("Max Work Hours/Day", 1, 12, 8)
+             if st.button("Update Limit"):
+                 backend.set_limit(doc_idx, limit_hours * 60)
+                 st.success(f"Limit set to {limit_hours} hours!")
+
         
     with col_view:
         # Calculate Stats for the Selected Date
@@ -466,7 +484,10 @@ else:
                     st.rerun()
                 elif res == "MAX_EVENTS":
                     st.error("Limit Reached: Max 7 events per day.")
+                elif res == "TIME_LIMIT":
+                     st.error("Time Limit Exceeded: You have reached your daily workload limit.")
                 elif res and res.startswith("COLLISION"):
+
                     parts = res.split()
                     c_start, c_end = int(parts[1]), int(parts[2])
                     
@@ -632,5 +653,14 @@ else:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
+            # Delete Button (using columns to align right below the card or inside it? Inside is hard with HTML injection)
+            # Alternative: Render a small st.button below each card
+            d_col1, d_col2 = st.columns([0.85, 0.15])
+            with d_col2:
+                 if st.button("🗑️", key=f"del_{e['id']}", help="Delete this event"):
+                     backend.delete_event(doc_idx, e['id'])
+                     st.rerun()
+
             
         st.markdown("</div>", unsafe_allow_html=True)

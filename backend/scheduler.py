@@ -47,6 +47,8 @@ class ITNode:
         self.right = None
 
 interval_trees = {i: None for i in range(MAX_DOCTORS)}
+daily_limits = {i: 480 for i in range(MAX_DOCTORS)} # Default 8 hours
+
 
 # --- Helpers ---
 
@@ -56,6 +58,14 @@ def get_events_on_day(doctor_id, day_start, day_end):
         if e.start_time >= day_start and e.start_time < day_end:
             count += 1
     return count
+
+def get_total_duration_on_day(doctor_id, day_start, day_end):
+    total = 0
+    for e in upcoming_heaps[doctor_id]:
+        if e.start_time >= day_start and e.start_time < day_end:
+            total += e.duration
+    return total
+
 
 # --- Interval Tree ---
 
@@ -102,6 +112,13 @@ def add_event(doctor_id, start, duration, type_id, break_type, desc):
     if get_events_on_day(doctor_id, day_start, day_end) >= MAX_EVENTS_DAILY_LIMIT:
         print("MAX_EVENTS")
         return
+
+    # Time Limit
+    curr_duration = get_total_duration_on_day(doctor_id, day_start, day_end)
+    if curr_duration + duration > daily_limits[doctor_id]:
+        print("TIME_LIMIT")
+        return
+
 
     end = start + duration
     
@@ -174,6 +191,27 @@ def undo(doctor_id):
         interval_trees[doctor_id] = it_insert(interval_trees[doctor_id], e)
         
     print("OK")
+
+def delete_event(doctor_id, event_id):
+    # Remove from Heap
+    upcoming_heaps[doctor_id] = [e for e in upcoming_heaps[doctor_id] if e.id != event_id]
+    
+    # Remove from Hash
+    key = event_id % HASH_SIZE
+    if key in event_hash_map[doctor_id]:
+        event_hash_map[doctor_id][key] = [e for e in event_hash_map[doctor_id][key] if e.id != event_id]
+        
+    # Rebuild Interval Tree
+    interval_trees[doctor_id] = None
+    for e in upcoming_heaps[doctor_id]:
+        interval_trees[doctor_id] = it_insert(interval_trees[doctor_id], e)
+        
+    print("OK")
+
+def set_limit(doctor_id, limit):
+    daily_limits[doctor_id] = limit
+    print("OK")
+
 
 def get_all(doctor_id):
     events = []
@@ -250,6 +288,17 @@ def main():
                 doc_id = int(parts[1])
                 curr = int(parts[2])
                 check_alert(doc_id, curr)
+
+            elif cmd == "DELETE":
+                doc_id = int(parts[1])
+                eid = int(parts[2])
+                delete_event(doc_id, eid)
+
+            elif cmd == "SET_LIMIT":
+                doc_id = int(parts[1])
+                limit = int(parts[2])
+                set_limit(doc_id, limit)
+
                 
             elif cmd == "EXIT":
                 break
