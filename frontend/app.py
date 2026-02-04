@@ -4,9 +4,10 @@ import time
 import json
 import sys
 import os
+from datetime import date
 
 # --- Constants ---
-SESSION_DURATION = 300 # 5 minutes
+SESSION_DURATION = 900 # 15 minutes
 USERS_FILE = os.path.join(os.path.dirname(__file__), "users.json")
 
 # --- Backend Interface ---
@@ -64,20 +65,20 @@ class SchedulerBackend:
         
         resp = self.send_command(f"ADD {doc_id} {start} {duration} {type_id} {break_type} {desc}")
         if resp == "OK":
-            st.session_state['edu_msg'] = "✅ Added: Inserted into Hash Map (O(1)), Interval Tree (O(log n)) & Min Heap. Stack updated for Undo."
+            st.session_state['edu_msg'] = " Added: Inserted into Hash Map (O(1)), Interval Tree (O(log n)) & Min Heap. Stack updated for Undo."
         elif resp and resp.startswith("COLLISION"):
-            st.session_state['edu_msg'] = "⚠️ Collision: Interval Tree detection found overlapping interval [Start, End)."
+            st.session_state['edu_msg'] = " Collision: Interval Tree detection found overlapping interval [Start, End)."
         return resp
 
     def suggest(self, doc_id, duration, day_start):
-        st.session_state['edu_msg'] = "🔎 Suggestion Algo: Linear scan checked against Interval Tree verification for free slots."
+        st.session_state['edu_msg'] = " Suggestion Algo: Linear scan checked against Interval Tree verification for free slots."
         resp = self.send_command(f"SUGGEST {doc_id} {duration} {day_start}")
         if resp and resp.startswith("SUGGESTION"):
             return int(resp.split()[1])
         return -1
 
     def undo(self, doc_id):
-        st.session_state['edu_msg'] = "↩️ Undo Operation: Stack LIFO Pop. Event ID retrieved. Hash Map Entry & Interval Tree Node removed & rebalanced."
+        st.session_state['edu_msg'] = "↩ Undo Operation: Stack LIFO Pop. Event ID retrieved. Hash Map Entry & Interval Tree Node removed & rebalanced."
         self.send_command(f"UNDO {doc_id}")
 
     def get_events(self, doc_id):
@@ -89,7 +90,10 @@ class SchedulerBackend:
 
     def check_alert(self, doc_id):
         now = time.localtime()
-        curr_mins = now.tm_hour * 60 + now.tm_min
+        # Calculate global minutes: ordinal * 1440 + minutes_of_day
+        current_day_ordinal = date.today().toordinal()
+        curr_mins = (current_day_ordinal * 1440) + (now.tm_hour * 60) + now.tm_min
+        
         resp = self.send_command(f"ALERT {doc_id} {curr_mins}")
         try:
             return int(resp)
@@ -97,7 +101,7 @@ class SchedulerBackend:
             return -1
 
     def delete_event(self, doc_id, event_id):
-        st.session_state['edu_msg'] = "❌ Deletion: Removed from Hash Map O(1) & Heap O(log n). Interval Tree Rebuilt."
+        st.session_state['edu_msg'] = " Deletion: Removed from Hash Map O(1) & Heap O(log n). Interval Tree Rebuilt."
         self.send_command(f"DELETE {doc_id} {event_id}")
 
     def set_limit(self, doc_id, limit):
@@ -287,7 +291,7 @@ if not st.session_state.logged_in:
     col_shim1, col_center, col_shim2 = st.columns([1, 1.5, 1])
     with col_center:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        tab1, tab2 = st.tabs(["🔐 Login", "✨ Signup"])
+        tab1, tab2 = st.tabs([" Login", " Signup"])
         
         with tab1:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -312,7 +316,6 @@ if not st.session_state.logged_in:
                 if r_user and r_pass:
                     res = register_user(r_user, r_pass)
                     if res == True:
-                        st.balloons()
                         st.success("Account created successfully! Please login.")
                     elif res == "Full":
                         st.error("Registration Closed: Max 2 doctors reached.")
@@ -358,7 +361,7 @@ else:
             animation: fadeIn 0.5s;
         ">
             <div style="font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; margin-bottom: 5px;">
-                🧠 Data Structure Operation
+                 Data Structure Operation
             </div>
             <div style="font-size: 1.1em; font-weight: 500;">
                 {e_msg}
@@ -517,7 +520,7 @@ else:
             
             st.markdown(f"""
             <div class='collision-box'>
-                <strong>⛔ Collision Detected</strong><br>
+                <strong> Collision Detected</strong><br>
                 Conflict at {c_disp}
             </div>
             """, unsafe_allow_html=True)
@@ -536,7 +539,7 @@ else:
                     
                     day_str = "TODAY" if s_ordinal == current_day_ordinal else s_date.strftime("%b %d")
                     
-                    st.info(f"💡 Suggestion: {day_str} at {s_h:02d}:{s_m:02d}")
+                    st.info(f" Suggestion: {day_str} at {s_h:02d}:{s_m:02d}")
                     
                     c_yes, c_no = st.columns(2)
                     with c_yes:
@@ -557,7 +560,7 @@ else:
                      st.rerun()
 
         st.markdown("---")
-        if st.button("↩️ Undo Last Action"):
+        if st.button(" Undo Last Action"):
             backend.undo(doc_idx)
             # st.toast("Last action undone") - Removed in favor of edu_msg
             st.rerun()
@@ -576,7 +579,7 @@ else:
         all_events = backend.get_events(doc_idx)
         
         # --- Day Slot Matrix ---
-        st.markdown("### 🗓️ Weekly Overview")
+        st.markdown("### Weekly Overview")
         
         # Create 7 columns
         days_cols = st.columns(7)
@@ -605,7 +608,7 @@ else:
                 """, unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown(f"### 📋 Schedule for {sel_d.strftime('%A, %b %d')}")
+        st.markdown(f"###  Schedule for {sel_d.strftime('%A, %b %d')}")
         
         # Filter for Selected Day
         day_events = [e for e in all_events if (e['start'] // 1440) == current_day_ordinal]
@@ -630,11 +633,11 @@ else:
                 2: "linear-gradient(90deg, rgba(0, 255, 155, 0.1) 0%, rgba(0, 200, 83, 0.05) 100%)"
             }
             border_colors = { 0: "#00c6ff", 1: "#ff00cc", 2: "#00ff9b" }
-            icons = {0: "😷", 1: "☕", 2: "📊"}
+            icons = {0: "Patient", 1: "Break", 2: "Meeting"}
             
             bg = styles.get(e['type'], styles[0])
             bor = border_colors.get(e['type'], border_colors[0])
-            icon = icons.get(e['type'], "📅")
+            icon = icons.get(e['type'], "Calendar")
             
             title = e['desc'].replace("_", " ")
             if e['type'] == 1:
@@ -658,7 +661,7 @@ else:
             # Alternative: Render a small st.button below each card
             d_col1, d_col2 = st.columns([0.85, 0.15])
             with d_col2:
-                 if st.button("🗑️", key=f"del_{e['id']}", help="Delete this event"):
+                 if st.button("Delete", key=f"del_{e['id']}", help="Delete this event"):
                      backend.delete_event(doc_idx, e['id'])
                      st.rerun()
 
